@@ -13,7 +13,7 @@ class TreadmillSpeed:
     addr        = None
     s           = None # Socket object
 
-    def __init__(self, ip='10.42.0.84', port=12345, tick_length=0.6, stream_time=1, gpio_pin=3):
+    def __init__(self, ip='10.42.0.84', port=12229, tick_length=0.6, stream_time=1, gpio_pin=7):
         # Initialise class properties
         self.ip          = ip
         self.port        = port
@@ -23,8 +23,8 @@ class TreadmillSpeed:
 
         # Set up GPIO
         GPIO.setmode(GPIO.BOARD)
-        GPIO.setup(gpio_pin, GPIO.IN, pull_up_down = GPIO.PUD_UP)
-        GPIO.add_event_detect(gpio_pin, GPIO.FALLING, callback=self.pinTriggered, bouncetime=100)
+        GPIO.setup(gpio_pin, GPIO.IN, pull_up_down = GPIO.PUD_UP )
+        GPIO.add_event_detect(gpio_pin, GPIO.FALLING, callback=self.pinTriggered, bouncetime=20)
 
         # Set up networking
         self.s.bind((self.ip, self.port))
@@ -46,12 +46,16 @@ class TreadmillSpeed:
         self.conn.send(str(speed).encode())
         self.count = 0
 
-    def __del__(self):
+    def clean(self):
         self.s.close()
 
 def main():
     T = TreadmillSpeed()
-    T.run()
+    try:
+        T.run()
+    except KeyboardInterrupt:
+        T.clean()
+        exit()
 
 if __name__ == "__main__":
     main()
