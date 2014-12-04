@@ -23,8 +23,8 @@ class TreadmillSpeed:
 
         # Set up GPIO
         GPIO.setmode(GPIO.BOARD)
-        GPIO.setup(self.gpio_pin, GPIO.IN, pull_up_down = GPIO.PUD_UP)
-        GPIO.add_event_detect(self.gpio_pin, GPIO.FALLING, callback=self.pinTriggered, bouncetime=100)
+        GPIO.setup(gpio_pin, GPIO.IN, pull_up_down = GPIO.PUD_UP)
+        GPIO.add_event_detect(gpio_pin, GPIO.FALLING, callback=self.pinTriggered, bouncetime=100)
 
         # Set up networking
         self.s.bind((self.ip, self.port))
