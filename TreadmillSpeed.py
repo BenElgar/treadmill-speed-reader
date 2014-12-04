@@ -3,7 +3,7 @@ from threading import Timer
 import socket
 
 class TreadmillSpeed:
-    count       = None
+    count       = 0
     tick_length = None
     stream_time = None
     gpio_pin    = None
