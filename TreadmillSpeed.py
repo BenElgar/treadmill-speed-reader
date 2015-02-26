@@ -1,6 +1,6 @@
 import RPi.GPIO as GPIO
 from threading import Timer
-import socket
+import socket, timeit
 
 class TreadmillSpeed:
     count       = 0
@@ -12,6 +12,8 @@ class TreadmillSpeed:
     conn        = None
     addr        = None
     s           = None # Socket object
+    last_spike  = None
+    spike_gap   = None
 
     def __init__(self, ip='10.42.0.84', port=12229, tick_length=0.6, stream_time=1, gpio_pin=7):
         # Initialise class properties
@@ -20,6 +22,7 @@ class TreadmillSpeed:
         self.tick_length = tick_length
         self.stream_time = stream_time
         self.s           = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.last_spike  = timeit.default_timer()
 
         # Set up GPIO
         GPIO.setmode(GPIO.BOARD)
@@ -35,13 +38,16 @@ class TreadmillSpeed:
         Timer(self.stream_time, self.streamTriggered).start()
 
     def pinTriggered(self, channel):
-        self.count += 1
+        spike_time = timeit.default_timer()
+        self.spike_gap = spike_time - self.last_spike
+        self.last_spike = spike_time
+
 
     def streamTriggered(self):
         # Call this every time period
         Timer(self.stream_time, self.streamTriggered).start()
 
-        speed = self.count*self.tick_length / self.stream_time
+        speed = self.tick_length/self.spike_gap
         print(speed)
         self.conn.send(str(speed).encode())
         self.count = 0
@@ -53,7 +59,7 @@ def main():
     T = TreadmillSpeed()
     try:
         T.run()
-    except KeyboardInterrupt:
+    except:
         T.clean()
         exit()
 
