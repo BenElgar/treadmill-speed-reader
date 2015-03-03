@@ -1,6 +1,7 @@
 import socket
 
-ip = "10.42.0.84"
+ip = "10.42.0.168"
+ip = "localhost"
 port = 12229
 buffer_size = 1024
 
