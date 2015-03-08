@@ -2,18 +2,21 @@ from threading import Timer
 import socket, timeit, sched, time
 
 class TreadmillSpeed:
-    cooldown    = 0
-    tick_length = None
-    stream_time = None
-    gpio_pin    = None
-    ip          = None
-    port        = None
-    conn        = None
-    addr        = None
-    s           = None # Socket object
-    last_spike  = None
-    spike_gap   = None
-    threads     = []
+    cooldown     = 0
+    tick_length  = None
+    stream_time  = None
+    gpio_pin     = None
+    ip           = None
+    port         = None
+    conn         = None
+    addr         = None
+    s            = None # Socket object
+    speed_method = None
+    threads      = []
+
+    # For last gap
+    last_spike   = None
+    spike_gap    = None
 
     # For recording
     record_file = None
@@ -50,7 +53,7 @@ class TreadmillSpeed:
             import RPi.GPIO as GPIO
             GPIO.setmode(GPIO.BOARD)
             GPIO.setup(gpio_pin, GPIO.IN, pull_up_down = GPIO.PUD_UP )
-            GPIO.add_event_detect(gpio_pin, GPIO.FALLING, callback=self.pinTriggered, bouncetime=20)
+            GPIO.add_event_detect(gpio_pin, GPIO.FALLING, callback=self.pin_triggered, bouncetime=20)
         except ImportError:
             pass
 
@@ -60,8 +63,11 @@ class TreadmillSpeed:
         self.conn, self.addr = self.s.accept()
 
 
-    def run(self):
-        thread = Timer(self.stream_time, self.streamTriggered).start()
+    def run(self, speed_method='last_gap'):
+        self.speed_method = speed_method
+
+        thread = Timer(self.stream_time, self.stream_triggered)
+        thread.start()
         self.threads.append(thread)
 
         if self.recording:
@@ -70,11 +76,11 @@ class TreadmillSpeed:
         if self.simulating:
             (start, times) = self.get_times()
             for t in times:
-                self.schedule.enter(t-start, 1, self.pinTriggered)
+                self.schedule.enter(t-start, 1, self.pin_triggered, [])
             self.schedule.run()
 
 
-    def pinTriggered(self, channel=None):
+    def pin_triggered(self, channel=None):
         spike_time = timeit.default_timer()
 
         if self.recording:
@@ -92,25 +98,37 @@ class TreadmillSpeed:
         times = data[1:]
         return (start, times)
 
-    def streamTriggered(self):
+    def stream_triggered(self):
         # Call this every time period
-        thread = Timer(self.stream_time, self.streamTriggered).start()
+        thread = Timer(self.stream_time, self.stream_triggered)
+        thread.start()
         self.threads.append(thread)
-        print(self.threads)
 
         if self.spike_gap:
+            speed = self.get_speed()
+            print(speed)
+            self.stream_send(speed)
+
+    def get_speed(self):
+        if self.speed_method == 'last_gap':
             if self.last_spike > timeit.default_timer() - self.cooldown:
                 speed = self.tick_length/self.spike_gap
             else:
                 speed = 0.00
-            print(speed)
-            self.streamSend(speed)
+        else:
+            pass
 
-    def streamSend(self, speed):
+        return speed
+
+
+    def stream_send(self, speed):
         self.conn.send(str(speed).encode())
 
-
     def clean(self):
+        print("Cleaning")
+
+        [x.cancel() for x in self.threads]
+
         # Wait for all threads to finish
         [x.join() for x in self.threads]
 
@@ -119,15 +137,11 @@ class TreadmillSpeed:
 
         self.s.shutdown(socket.SHUT_RDWR)
         self.s.close()
-        print("cleaned")
+        print("Cleaned")
 
 def main():
-    T = TreadmillSpeed(record_filename='slow.log')
-    try:
-        T.run()
-    finally:
-        #T.clean()
-        exit()
+    T = TreadmillSpeed()
+    T.run()
 
 if __name__ == "__main__":
     main()
