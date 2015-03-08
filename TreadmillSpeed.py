@@ -1,5 +1,5 @@
 from threading import Timer
-import socket, timeit, sched, time
+import socket, timeit, sched, time, collections
 
 class TreadmillSpeed:
     cooldown     = 0
@@ -13,10 +13,7 @@ class TreadmillSpeed:
     s            = None # Socket object
     speed_method = None
     threads      = []
-
-    # For last gap
-    last_spike   = None
-    spike_gap    = None
+    spike_buffer = None
 
     # For recording
     record_file = None
@@ -34,7 +31,6 @@ class TreadmillSpeed:
         self.tick_length = tick_length
         self.stream_time = stream_time
         self.s           = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.last_spike  = timeit.default_timer()
         self.cooldown    = cooldown
 
         # Set up recording
@@ -63,8 +59,11 @@ class TreadmillSpeed:
         self.conn, self.addr = self.s.accept()
 
 
-    def run(self, speed_method='last_gap'):
+    def run(self, speed_method='average_gap', spike_buffer_count=10):
         self.speed_method = speed_method
+        self.spike_buffer = collections.deque(maxlen = spike_buffer_count)
+        self.spike_buffer.append(timeit.default_timer())
+
 
         thread = Timer(self.stream_time, self.stream_triggered)
         thread.start()
@@ -87,8 +86,7 @@ class TreadmillSpeed:
             self.record_file.write(str(spike_time) + '\n')
             print(spike_time)
         else:
-            self.spike_gap = spike_time - self.last_spike
-            self.last_spike = spike_time
+            self.spike_buffer.append(spike_time)
 
     def get_times(self):
         data = self.log_file.readlines()
@@ -104,15 +102,22 @@ class TreadmillSpeed:
         thread.start()
         self.threads.append(thread)
 
-        if self.spike_gap:
+        if len(self.spike_buffer) > 2:
             speed = self.get_speed()
             print(speed)
             self.stream_send(speed)
 
     def get_speed(self):
-        if self.speed_method == 'last_gap':
-            if self.last_spike > timeit.default_timer() - self.cooldown:
-                speed = self.tick_length/self.spike_gap
+        if self.speed_method == 'average_gap':
+            total_gap = 0
+            for i in range(1, len(self.spike_buffer)):
+                total_gap += self.spike_buffer[i] - self.spike_buffer[i-1]
+
+            average_gap = total_gap / len(self.spike_buffer)
+
+
+            if self.spike_buffer[-1] > timeit.default_timer() - self.cooldown:
+                speed = self.tick_length/average_gap
             else:
                 speed = 0.00
         else:
@@ -127,8 +132,6 @@ class TreadmillSpeed:
     def clean(self):
         print("Cleaning")
 
-        [x.cancel() for x in self.threads]
-
         # Wait for all threads to finish
         [x.join() for x in self.threads]
 
@@ -142,6 +145,7 @@ class TreadmillSpeed:
 def main():
     T = TreadmillSpeed()
     T.run()
+
 
 if __name__ == "__main__":
     main()
