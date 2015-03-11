@@ -127,7 +127,8 @@ class TreadmillSpeed:
 
 
     def stream_send(self, speed):
-        self.conn.send(str(speed).encode())
+        print(speed)
+        self.conn.send(str(speed).zfill(18).encode())
 
     def clean(self):
         print("Cleaning")
@@ -143,7 +144,7 @@ class TreadmillSpeed:
         print("Cleaned")
 
 def main():
-    T = TreadmillSpeed()
+    T = TreadmillSpeed(simulate_filename='slow.log')
     T.run()
 
 
