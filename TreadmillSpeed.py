@@ -3,8 +3,9 @@ import socket, timeit, sched, time, collections
 
 class TreadmillSpeed:
     speed_method = None
-    __threads      = []
-    __spike_buffer = None
+    __threads    = []
+    spike_buffer = None
+    running      = False
 
     def __init__(self, ip='', port=12229, tick_length=0.6, stream_time=0.1, gpio_pin=7, cooldown=0.5, record_filename=None, simulate_filename=None):
         """!
@@ -51,10 +52,14 @@ class TreadmillSpeed:
         except ImportError:
             pass
 
+        print("Waiting for connection")
+
         # Set up networking
         self.s.bind((self.ip, self.port))
         self.s.listen(1)
         self.conn, _ = self.s.accept()
+
+        print("Connected")
 
 
     def run(self, speed_method='average_gap', spike_buffer_count=10):
@@ -67,9 +72,10 @@ class TreadmillSpeed:
         The treadmill speed is sent across the sockets to the treadmill receive script
         """
 
+        self.running = True
         self.speed_method = speed_method
-        self.__spike_buffer = collections.deque(maxlen = spike_buffer_count)
-        self.__spike_buffer.append(timeit.default_timer())
+        self.spike_buffer = collections.deque(maxlen = spike_buffer_count)
+        self.spike_buffer.append(timeit.default_timer())
 
 
         thread = Timer(self.stream_time, self.__stream_triggered)
@@ -87,13 +93,14 @@ class TreadmillSpeed:
 
 
     def __pin_triggered(self, channel=None):
-        spike_time = timeit.default_timer()
+        if self.running:
+            spike_time = timeit.default_timer()
 
-        if self.recording:
-            self.record_file.write(str(spike_time) + '\n')
-            print(spike_time)
-        else:
-            self.__spike_buffer.append(spike_time)
+            if self.recording:
+                self.record_file.write(str(spike_time) + '\n')
+                print(spike_time)
+            else:
+                self.spike_buffer.append(spike_time)
 
     def __get_times(self):
         """
@@ -115,7 +122,7 @@ class TreadmillSpeed:
         thread.start()
         self.__threads.append(thread)
 
-        if len(self.__spike_buffer) > 2:
+        if len(self.spike_buffer) > 2:
             speed = self.__get_speed()
             print(speed)
             self.__stream_send(speed)
@@ -126,13 +133,13 @@ class TreadmillSpeed:
         """
         if self.speed_method == 'average_gap':
             total_gap = 0
-            for i in range(1, len(self.__spike_buffer)):
-                total_gap += self.__spike_buffer[i] - self.__spike_buffer[i-1]
+            for i in range(1, len(self.spike_buffer)):
+                total_gap += self.spike_buffer[i] - self.spike_buffer[i-1]
 
-            average_gap = total_gap / len(self.__spike_buffer)
+            average_gap = total_gap / len(self.spike_buffer)
 
 
-            if self.__spike_buffer[-1] > timeit.default_timer() - self.cooldown:
+            if self.spike_buffer[-1] > timeit.default_timer() - self.cooldown:
                 speed = self.tick_length/average_gap
             else:
                 speed = 0.00
@@ -151,8 +158,6 @@ class TreadmillSpeed:
         """
         Cleans up the connections and closes the files
         """
-        print("Cleaning")
-
         # Wait for all threads to finish
         [x.join() for x in self.__threads]
 
